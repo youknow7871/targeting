@@ -5,6 +5,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const recommendationsContainer = document.getElementById('recommendations-container');
     const keywordCloud = document.getElementById('keyword-cloud');
 
+    // Populate dropdowns dynamically
+    populateDropdowns(window.CAMPAIGN_DATA);
+
     // Render keyword cloud
     const topKeywords = engine.analyzeKeywords().slice(0, 10);
     topKeywords.forEach(kw => {
@@ -119,6 +122,34 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             recommendationsContainer.appendChild(card);
+        });
+    }
+
+    function populateDropdowns(data) {
+        const segments = [...new Set(data.map(item => item["고객 세그먼트"]))].filter(Boolean);
+        const mediums = [...new Set(data.map(item => item["발송매체"]))].filter(Boolean);
+        
+        const segmentSelect = document.getElementById('customer-segment');
+        const mediumSelect = document.getElementById('medium');
+        
+        // Clear existing (except maybe placeholder if it existed)
+        segmentSelect.innerHTML = '';
+        mediumSelect.innerHTML = '';
+        
+        segments.forEach(seg => {
+            const opt = document.createElement('option');
+            opt.value = seg.includes('골드') ? 'gold' : seg.includes('다이아') ? 'diamond' : 'external';
+            opt.textContent = seg;
+            opt.dataset.actual = seg; // Keep actual name
+            segmentSelect.appendChild(opt);
+        });
+        
+        mediums.forEach(med => {
+            const opt = document.createElement('option');
+            opt.value = med === '푸시' ? 'push' : 'lms';
+            opt.textContent = med;
+            opt.dataset.actual = med;
+            mediumSelect.appendChild(opt);
         });
     }
 });
