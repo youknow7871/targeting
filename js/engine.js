@@ -21,15 +21,21 @@ class CampaignEngine {
     getInsightsForParams(params) {
         const { isWeekend, segment, medium } = params;
         
+        // GROUND RULE: Ignore rows where URL is invalid (e.g., image-only feeds)
+        const validData = this.data.filter(item => {
+            const link = (item["링크"] || "").toLowerCase();
+            return link.startsWith("http://") || link.startsWith("https://");
+        });
+
         // Filter data relevant to current condition to find what works best
-        const relevantData = this.data.filter(item => {
+        const relevantData = validData.filter(item => {
             let score = 0;
             if (item["고객 세그먼트"] && item["고객 세그먼트"].includes(segment)) score += 3;
             if (item["발송매체"] && item["발송매체"].includes(medium)) score += 1;
             return score >= 1; // Must have some relevance
         });
 
-        const targetData = relevantData.length > 0 ? relevantData : this.data; // fallback to all data if none match
+        const targetData = relevantData.length > 0 ? relevantData : validData; // fallback to valid data if none match
 
         // Keyword extraction & scoring
         const keywords = {};
@@ -73,6 +79,24 @@ class CampaignEngine {
     buildPrompt(params) {
         const insights = this.getInsightsForParams(params);
         
+        let mediumConstraints = "";
+        if (params.medium === '푸시') {
+            mediumConstraints = `
+- 🚨 THIS IS A PUSH NOTIFICATION (App/Web Push) or ALIMTALK. IT MUST BE EXTREMELY CONCISE AND SHORT!
+- Title Length: MAXIMUM 15~20 characters (must fit on one line on a locked smartphone screen).
+- Content Length: MAXIMUM 30~50 characters.
+- Style: Highly engaging, urgent, or fun.
+- You MUST organically use 1 or 2 appropriate EMOJIS (🔔, 🔥, 🚀, 🎁, etc.) in the Title and Content.
+- DO NOT write a long text message. NO formal structural templates like '(광고)' unless necessary. Keep it punchy!
+`;
+        } else {
+            mediumConstraints = `
+- THIS IS A LONG TEXT MESSAGE (LMS).
+- Length: Up to 150~300 characters. Detailed and informative.
+- Style: Professional yet highly engaging. Can use structural layouts (e.g., bullet points) and formal greetings.
+`;
+        }
+        
         const contextStr = `
 You are a highly skilled CRM Marketing AI. Your objective is to generate 3 customized CRM messages.
 Target Audience (Segment): ${params.segment}
@@ -85,15 +109,15 @@ Based on historical data for this audience, the average Open Rate is ${insights.
 The most statistically effective keywords that mathematically lifted Open Rates (Highest Priority) are: 
 ${insights.topKeywords.map(k => `"${k.word}"`).join(', ')}
 
-Here are extreme high-performing past successful campaigns exactly for this segment/medium to study the preferred tone and length:
+Here are extreme high-performing past successful campaigns exactly for this segment/medium. Use them ONLY as a loose reference for tone:
 ${insights.pastBestPerformers.map(p => `- Title: ${p['제목']}\n  Content: ${p['내용']}\n  Result: CTR ${p.openRate}%, CVR ${p.cvr}%`).join('\n\n')}
 
 [Task Constraints]
 1. Write 3 highly engaging, creative, and personalized campaign messages matching the "Campaign Purpose".
+${mediumConstraints}
 2. You MUST organically sprinkle the "highly effective keywords" identified by ML into your writing.
-3. Keep the tone similar to the past successful campaigns, but adapt it to the new purpose.
-4. Predict the CTR and CVR for each of your 3 recommendations. Make realistic, data-driven estimations slightly higher than historical baseline.
-5. YOU MUST RETURN YOUR RESPONSE IN PURE RAW JSON FORMAT ONLY, without any markdown blocks or explanation. Do not wrap in \`\`\`json. The JSON must be an array of objects precisely following this schema:
+3. Predict the CTR and CVR for each of your 3 recommendations. Make realistic, data-driven estimations slightly higher than historical baseline.
+4. YOU MUST RETURN YOUR RESPONSE IN PURE RAW JSON FORMAT ONLY, without any markdown blocks or explanation. Do not wrap in \`\`\`json. The JSON must be an array of objects precisely following this schema:
 [
   {
     "title": "String",
