@@ -9,17 +9,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     async function init() {
         try {
-            const data = await fetchData();
-            engine = new CampaignEngine(data);
+            const rawData = await fetchData();
+            const processedData = processSheetData(rawData);
+            
+            engine = new CampaignEngine(processedData);
             
             // Populate dropdowns dynamically
-            populateDropdowns(data);
+            populateDropdowns(processedData);
 
             // Render keyword cloud
             renderKeywordCloud();
         } catch (error) {
             console.error('Error initializing app:', error);
-            alert('데이터를 불러오는 중 오류가 발생했습니다.');
+            // alert('데이터를 불러오는 중 오류가 발생했습니다. 구글 시트 게시 상태를 확인해주세요.');
         }
     }
 
@@ -27,16 +29,65 @@ document.addEventListener('DOMContentLoaded', async () => {
         return new Promise((resolve, reject) => {
             Papa.parse(SHEET_URL, {
                 download: true,
-                header: true,
+                header: false,
                 skipEmptyLines: true,
                 complete: (results) => {
-                    resolve(results.data);
+                    const rows = results.data;
+                    // Find header row index (scanning first 10 rows)
+                    let headerIndex = -1;
+                    for (let i = 0; i < Math.min(10, rows.length); i++) {
+                        if (rows[i].includes('고객 세그먼트') || rows[i].includes('발송매체')) {
+                            headerIndex = i;
+                            break;
+                        }
+                    }
+                    
+                    if (headerIndex === -1) {
+                        console.error('Header row not found in the CSV');
+                        resolve([]); // fallback
+                        return;
+                    }
+                    
+                    const headers = rows[headerIndex];
+                    const dataRows = rows.slice(headerIndex + 1);
+                    
+                    const parsedData = dataRows.map(row => {
+                        const obj = {};
+                        headers.forEach((header, index) => {
+                            // Only map non-empty headers
+                            if (header && typeof header === 'string') {
+                                // Keep the first occurrence of a header if duplicates exist
+                                if (!(header.trim() in obj)) {
+                                    obj[header.trim()] = row[index] || "";
+                                }
+                            }
+                        });
+                        return obj;
+                    });
+                    
+                    resolve(parsedData);
                 },
                 error: (error) => {
                     reject(error);
                 }
             });
         });
+    }
+
+    function processSheetData(data) {
+        // Map sheet column names to engine keys if they differ
+        return data.map(row => ({
+            "발송일자": row["발송일자"] || row["날짜"] || "",
+            "발송시간": row["발송시간"] || "",
+            "발송매체": row["발송매체"] || row["매체"] || "",
+            "고객 세그먼트": row["고객 세그먼트"] || row["세그먼트"] || "",
+            "제목": row["제목"] || "",
+            "내용": row["내용"] || "",
+            "Info": row["Info"] || row["캠페인명"] || "",
+            "오픈율": row["오픈율"] || row["CTR"] || "0%",
+            "CTR": row["CTR"] || row["오픈율"] || "0%",
+            "구매전환율": row["구매율"] || row["구매전환율"] || row["CVR"] || "0%"
+        }));
     }
 
     function renderKeywordCloud() {
