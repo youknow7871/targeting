@@ -207,6 +207,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             };
 
             const candidateModels = [
+                'gemini-3.1-pro-preview', // prioritize superior Pro model
                 'gemini-flash-latest', 
                 'gemini-1.5-flash-latest', 
                 'gemini-pro-latest',
