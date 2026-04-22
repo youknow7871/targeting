@@ -201,23 +201,33 @@ document.addEventListener('DOMContentLoaded', async () => {
                 body: JSON.stringify({
                     contents: [{ parts: [{ text: prompt }] }],
                     generationConfig: {
-                        temperature: 0.7,
-                        // gemini-pro 1.0 does not support responseMimeType
+                        temperature: 0.7
                     }
                 })
             };
 
-            // Call Gemini API (use latest alias for safety)
-            let response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`, fetchConfig);
+            const candidateModels = [
+                'gemini-flash-latest', 
+                'gemini-1.5-flash-latest', 
+                'gemini-pro-latest',
+                'gemini-pro'
+            ];
             
-            // If the user's specific API key or region does not support 1.5 flash, fallback to gemini-pro (1.0)
-            if (response.status === 404) {
-                console.warn("gemini-1.5-flash-latest not found for this key, falling back to gemini-pro");
-                response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`, fetchConfig);
+            let response = null;
+            let finalModel = null;
+
+            for (const model of candidateModels) {
+                console.log(`Trying Gemini model: ${model}...`);
+                response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, fetchConfig);
+                
+                if (response.status !== 404) {
+                    finalModel = model;
+                    break; // Found a working model for this API key!
+                }
             }
 
-            if (!response.ok) {
-                const errText = await response.text();
+            if (!response || !response.ok) {
+                const errText = await (response ? response.text() : Promise.resolve('No response'));
                 console.error("Gemini API Error details:", errText);
                 let errMsg = errText;
                 try {
