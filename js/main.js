@@ -157,9 +157,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         e.preventDefault();
         if (!engine) return;
 
-        const apiKey = localStorage.getItem('gemini_api_key');
+        let apiKey = localStorage.getItem('gemini_api_key');
+        const inputVal = document.getElementById('gemini-api-key').value.trim();
+        if (inputVal) {
+            apiKey = inputVal; // Fallback directly to input in case user forgot to press save
+            localStorage.setItem('gemini_api_key', apiKey);
+            checkApiKey();
+        }
+
         if (!apiKey) {
-            alert('Gen AI 기능을 사용하려면 우측 상단에 Gemini API Key를 입력하고 Save를 눌러주세요.');
+            alert('Gen AI 기능을 사용하려면 우측 상단에 Gemini API Key를 입력해주세요.');
             return;
         }
         
@@ -188,8 +195,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const prompt = engine.buildPrompt(params);
 
-            // Call Gemini API
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+            // Call Gemini API (use latest alias for safety)
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
