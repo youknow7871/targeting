@@ -216,26 +216,37 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             let response = null;
             let finalModel = null;
+            let lastErrText = "";
 
             for (const model of candidateModels) {
                 console.log(`Trying Gemini model: ${model}...`);
-                response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, fetchConfig);
-                
-                if (response.status !== 404) {
-                    finalModel = model;
-                    break; // Found a working model for this API key!
+                try {
+                    response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, fetchConfig);
+                    
+                    if (response.ok) {
+                        finalModel = model;
+                        break; // Found a working model for this API key!
+                    } else {
+                        // Keep track of the error but continue trying other models
+                        lastErrText = await response.text();
+                        console.warn(`Model ${model} failed: ${response.status}`, lastErrText);
+                    }
+                } catch (e) {
+                    console.warn(`Fetch error for ${model}:`, e);
                 }
             }
 
-            if (!response || !response.ok) {
-                const errText = await (response ? response.text() : Promise.resolve('No response'));
-                console.error("Gemini API Error details:", errText);
-                let errMsg = errText;
+            if (!finalModel || !response || !response.ok) {
+                console.error("All candidate models failed. Last error:", lastErrText);
+                let errMsg = lastErrText;
                 try {
-                    const errJson = JSON.parse(errText);
-                    errMsg = errJson.error ? errJson.error.message : errText;
+                    const errJson = JSON.parse(lastErrText);
+                    errMsg = errJson.error ? errJson.error.message : lastErrText;
                 } catch(e) {}
-                throw new Error(`API Error: ${response.status} - ${errMsg}`);
+                
+                // If it's still missing, it means the key is invalid or totally blocked
+                if(!errMsg) errMsg = "Invalid API Key or network error.";
+                throw new Error(`API Error - ${errMsg}`);
             }
 
             const data = await response.json();
