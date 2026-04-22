@@ -7,36 +7,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const recommendationsContainer = document.getElementById('recommendations-container');
     const keywordCloud = document.getElementById('keyword-cloud');
 
-    // API Key Management
-    const apiKeyInput = document.getElementById('gemini-api-key');
-    const saveKeyBtn = document.getElementById('save-api-key');
-    const apiStatus = document.getElementById('api-status');
-
-    function checkApiKey() {
-        const key = localStorage.getItem('gemini_api_key');
-        if (key) {
-            apiKeyInput.value = key;
-            apiStatus.innerHTML = '<i class="fas fa-check-circle"></i> Key Saved';
-            apiStatus.className = 'api-status saved';
-        } else {
-            apiStatus.innerHTML = '<i class="fas fa-times-circle"></i> Key Not Saved';
-            apiStatus.className = 'api-status missing';
-        }
-    }
-
-    saveKeyBtn.addEventListener('click', () => {
-        const val = apiKeyInput.value.trim();
-        if (val) {
-            localStorage.setItem('gemini_api_key', val);
-            checkApiKey();
-            // alert('API Key saved securely in your browser.');
-        } else {
-            localStorage.removeItem('gemini_api_key');
-            checkApiKey();
-        }
-    });
-
-    checkApiKey();
+    // API Key Management has been removed for Vercel Backend Security
 
     async function init() {
         try {
@@ -156,19 +127,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         if (!engine) return;
-
-        let apiKey = localStorage.getItem('gemini_api_key');
-        const inputVal = document.getElementById('gemini-api-key').value.trim();
-        if (inputVal) {
-            apiKey = inputVal; // Fallback directly to input in case user forgot to press save
-            localStorage.setItem('gemini_api_key', apiKey);
-            checkApiKey();
-        }
-
-        if (!apiKey) {
-            alert('Gen AI 기능을 사용하려면 우측 상단에 Gemini API Key를 입력해주세요.');
-            return;
-        }
         
         const btn = document.getElementById('generate-btn');
         const loader = btn.querySelector('.loader-inner');
@@ -195,58 +153,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const prompt = engine.buildPrompt(params);
 
-            const fetchConfig = {
+            // Call Vercel Backend
+            const response = await fetch(`/api/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: {
-                        temperature: 0.7
-                    }
-                })
-            };
+                body: JSON.stringify({ prompt: prompt })
+            });
 
-            const candidateModels = [
-                'gemini-3.1-pro-preview', // prioritize superior Pro model
-                'gemini-flash-latest', 
-                'gemini-1.5-flash-latest', 
-                'gemini-pro-latest',
-                'gemini-pro'
-            ];
-            
-            let response = null;
-            let finalModel = null;
-            let lastErrText = "";
-
-            for (const model of candidateModels) {
-                console.log(`Trying Gemini model: ${model}...`);
-                try {
-                    response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, fetchConfig);
-                    
-                    if (response.ok) {
-                        finalModel = model;
-                        break; // Found a working model for this API key!
-                    } else {
-                        // Keep track of the error but continue trying other models
-                        lastErrText = await response.text();
-                        console.warn(`Model ${model} failed: ${response.status}`, lastErrText);
-                    }
-                } catch (e) {
-                    console.warn(`Fetch error for ${model}:`, e);
-                }
-            }
-
-            if (!finalModel || !response || !response.ok) {
-                console.error("All candidate models failed. Last error:", lastErrText);
-                let errMsg = lastErrText;
-                try {
-                    const errJson = JSON.parse(lastErrText);
-                    errMsg = errJson.error ? errJson.error.message : lastErrText;
-                } catch(e) {}
-                
-                // If it's still missing, it means the key is invalid or totally blocked
-                if(!errMsg) errMsg = "Invalid API Key or network error.";
-                throw new Error(`API Error - ${errMsg}`);
+            if (!response.ok) {
+                const errJson = await response.json().catch(() => ({error: 'Unknown backend error'}));
+                throw new Error(`백엔드 오류: ${errJson.error}`);
             }
 
             const data = await response.json();
