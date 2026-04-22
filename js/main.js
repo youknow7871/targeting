@@ -195,18 +195,26 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const prompt = engine.buildPrompt(params);
 
-            // Call Gemini API (use latest alias for safety)
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`, {
+            const fetchConfig = {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     contents: [{ parts: [{ text: prompt }] }],
                     generationConfig: {
                         temperature: 0.7,
-                        responseMimeType: "application/json"
+                        // gemini-pro 1.0 does not support responseMimeType
                     }
                 })
-            });
+            };
+
+            // Call Gemini API (use latest alias for safety)
+            let response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`, fetchConfig);
+            
+            // If the user's specific API key or region does not support 1.5 flash, fallback to gemini-pro (1.0)
+            if (response.status === 404) {
+                console.warn("gemini-1.5-flash-latest not found for this key, falling back to gemini-pro");
+                response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`, fetchConfig);
+            }
 
             if (!response.ok) {
                 const errText = await response.text();
@@ -223,10 +231,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             const rawJsonText = data.candidates[0].content.parts[0].text;
             let recs = [];
             try {
-                recs = JSON.parse(rawJsonText);
+                const cleanText = rawJsonText.replace(/```json/g, '').replace(/```/g, '').trim();
+                recs = JSON.parse(cleanText);
             } catch (err) {
                 console.error("Failed to parse Gemini output:", rawJsonText);
-                throw new Error("Invalid output format from AI");
+                throw new Error("Invalid output format from AI (not a pure JSON array)");
             }
 
             renderRecommendations(recs);
