@@ -202,7 +202,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
 
             if (!response.ok) {
-                throw new Error(`API Error: ${response.status}`);
+                const errText = await response.text();
+                console.error("Gemini API Error details:", errText);
+                let errMsg = errText;
+                try {
+                    const errJson = JSON.parse(errText);
+                    errMsg = errJson.error ? errJson.error.message : errText;
+                } catch(e) {}
+                throw new Error(`API Error: ${response.status} - ${errMsg}`);
             }
 
             const data = await response.json();
