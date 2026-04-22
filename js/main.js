@@ -7,6 +7,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     const recommendationsContainer = document.getElementById('recommendations-container');
     const keywordCloud = document.getElementById('keyword-cloud');
 
+    // API Key Management
+    const apiKeyInput = document.getElementById('gemini-api-key');
+    const saveKeyBtn = document.getElementById('save-api-key');
+    const apiStatus = document.getElementById('api-status');
+
+    function checkApiKey() {
+        const key = localStorage.getItem('gemini_api_key');
+        if (key) {
+            apiKeyInput.value = key;
+            apiStatus.innerHTML = '<i class="fas fa-check-circle"></i> Key Saved';
+            apiStatus.className = 'api-status saved';
+        } else {
+            apiStatus.innerHTML = '<i class="fas fa-times-circle"></i> Key Not Saved';
+            apiStatus.className = 'api-status missing';
+        }
+    }
+
+    saveKeyBtn.addEventListener('click', () => {
+        const val = apiKeyInput.value.trim();
+        if (val) {
+            localStorage.setItem('gemini_api_key', val);
+            checkApiKey();
+            // alert('API Key saved securely in your browser.');
+        } else {
+            localStorage.removeItem('gemini_api_key');
+            checkApiKey();
+        }
+    });
+
+    checkApiKey();
+
     async function init() {
         try {
             const rawData = await fetchData();
@@ -122,20 +153,31 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    form.addEventListener('submit', (e) => {
+    form.addEventListener('submit', async (e) => {
         e.preventDefault();
         if (!engine) return;
+
+        const apiKey = localStorage.getItem('gemini_api_key');
+        if (!apiKey) {
+            alert('Gen AI 기능을 사용하려면 우측 상단에 Gemini API Key를 입력하고 Save를 눌러주세요.');
+            return;
+        }
         
         const btn = document.getElementById('generate-btn');
         const loader = btn.querySelector('.loader-inner');
         const btnText = btn.querySelector('span');
+        const skeletons = document.getElementById('loading-skeletons');
 
         // Loading state
         btnText.style.display = 'none';
         loader.style.display = 'block';
         btn.disabled = true;
+        resultsArea.style.display = 'block';
+        recommendationsContainer.style.display = 'none';
+        skeletons.style.display = 'block';
+        resultsArea.scrollIntoView({ behavior: 'smooth' });
 
-        setTimeout(() => {
+        try {
             const params = {
                 isWeekend: document.getElementById('send-day').value === 'weekend',
                 time: document.getElementById('send-time').value,
@@ -144,16 +186,47 @@ document.addEventListener('DOMContentLoaded', async () => {
                 purpose: document.getElementById('campaign-purpose').value
             };
 
-            const recs = engine.recommend(params);
+            const prompt = engine.buildPrompt(params);
+
+            // Call Gemini API
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: {
+                        temperature: 0.7,
+                        responseMimeType: "application/json"
+                    }
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`API Error: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const rawJsonText = data.candidates[0].content.parts[0].text;
+            let recs = [];
+            try {
+                recs = JSON.parse(rawJsonText);
+            } catch (err) {
+                console.error("Failed to parse Gemini output:", rawJsonText);
+                throw new Error("Invalid output format from AI");
+            }
+
             renderRecommendations(recs);
 
-            resultsArea.style.display = 'block';
+        } catch (error) {
+            console.error(error);
+            alert('AI 생성 중 오류가 발생했습니다. API Key가 올바른지 확인해주세요.\n\n에러 내용: ' + error.message);
+        } finally {
+            skeletons.style.display = 'none';
+            recommendationsContainer.style.display = 'grid'; // Reset to grid
             btnText.style.display = 'block';
             loader.style.display = 'none';
             btn.disabled = false;
-
-            resultsArea.scrollIntoView({ behavior: 'smooth' });
-        }, 800);
+        }
     });
 
     function renderRecommendations(recs) {

@@ -13,16 +13,19 @@
 <body class="dark-mode">
     <div class="background-glow"></div>
     
-    <header>
+    <nav class="glass-header">
         <div class="logo">
-            <span class="logo-icon">✨</span>
-            <h1>CRM Architect <span class="badge">AI PRO</span></h1>
+            <span class="highlight">CRM</span> AI Architect 2.0
         </div>
-        <div class="status-bar">
-            <span class="status-dot"></span>
-            <span id="data-status">Historical Data Loaded: 50 Campaigns</span>
+        <div class="api-settings">
+            <div class="api-input-group">
+                <i class="fas fa-key"></i>
+                <input type="password" id="gemini-api-key" placeholder="Enter Gemini API Key..." />
+                <button id="save-api-key" class="btn-secondary">Save</button>
+            </div>
+            <span id="api-status" class="api-status"><i class="fas fa-times-circle"></i> Key Not Saved</span>
         </div>
-    </header>
+    </nav>
 
     <main>
         <section class="planner-section">
@@ -82,14 +85,20 @@
 
         <section class="results-section" id="results-area" style="display:none;">
             <div class="section-header">
-                <h2>추천 결과 및 예측 성과</h2>
-                <div class="keyword-cloud" id="keyword-cloud">
-                    <!-- 유의미한 키워드들이 여기에 렌더링됨 -->
+                <div class="header-content">
+                    <h2>✨ AI 생성이 완료되었습니다</h2>
+                    <p>데이터 기반의 가장 효과적인 문구 3가지를 생성했습니다.</p>
                 </div>
-            </div>
-
-            <div class="recommendations-grid" id="recommendations-container">
-                <!-- 추천 카드들이 여기에 렌더링됨 -->
+                <div id="loading-skeletons" style="display: none;">
+                    <div class="recommendation-card skeleton-card">
+                        <div class="skeleton-line title"></div>
+                        <div class="skeleton-line content"></div>
+                        <div class="skeleton-line content short"></div>
+                    </div>
+                </div>
+                <div class="recommendations-container" id="recommendations-container">
+                    <!-- Cards will be injected here -->
+                </div>
             </div>
         </section>
     </main>
