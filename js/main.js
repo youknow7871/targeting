@@ -1,21 +1,54 @@
-document.addEventListener('DOMContentLoaded', () => {
-    const engine = new CampaignEngine(window.CAMPAIGN_DATA);
+document.addEventListener('DOMContentLoaded', async () => {
+    const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTgZpOBpn3xw59aPXznJLkXnAMBxQJ3y2VpfxKlLku12jdGvZbHVPo33T81BbuUXRUcqnLYWNvFNLMk/pub?gid=1177965804&single=true&output=csv';
+    
+    let engine;
     const form = document.getElementById('planner-form');
     const resultsArea = document.getElementById('results-area');
     const recommendationsContainer = document.getElementById('recommendations-container');
     const keywordCloud = document.getElementById('keyword-cloud');
 
-    // Populate dropdowns dynamically
-    populateDropdowns(window.CAMPAIGN_DATA);
+    async function init() {
+        try {
+            const data = await fetchData();
+            engine = new CampaignEngine(data);
+            
+            // Populate dropdowns dynamically
+            populateDropdowns(data);
 
-    // Render keyword cloud
-    const topKeywords = engine.analyzeKeywords().slice(0, 10);
-    topKeywords.forEach(kw => {
-        const tag = document.createElement('span');
-        tag.className = 'keyword-tag';
-        tag.textContent = `#${kw.word} (Lift: +${(kw.openLift * 100).toFixed(0)}%)`;
-        keywordCloud.appendChild(tag);
-    });
+            // Render keyword cloud
+            renderKeywordCloud();
+        } catch (error) {
+            console.error('Error initializing app:', error);
+            alert('데이터를 불러오는 중 오류가 발생했습니다.');
+        }
+    }
+
+    async function fetchData() {
+        return new Promise((resolve, reject) => {
+            Papa.parse(SHEET_URL, {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: (results) => {
+                    resolve(results.data);
+                },
+                error: (error) => {
+                    reject(error);
+                }
+            });
+        });
+    }
+
+    function renderKeywordCloud() {
+        keywordCloud.innerHTML = '';
+        const topKeywords = engine.analyzeKeywords().slice(0, 10);
+        topKeywords.forEach(kw => {
+            const tag = document.createElement('span');
+            tag.className = 'keyword-tag';
+            tag.textContent = `#${kw.word} (Lift: +${(kw.openLift * 100).toFixed(0)}%)`;
+            keywordCloud.appendChild(tag);
+        });
+    }
     
     // Real-time relevance score
     const purposeInput = document.getElementById('campaign-purpose');
@@ -23,6 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const scoreValue = relevanceBadge.querySelector('.score-value');
 
     purposeInput.addEventListener('input', () => {
+        if (!engine) return;
         const score = engine.getRelevanceScore(purposeInput.value);
         if (score > 0) {
             relevanceBadge.style.display = 'flex';
@@ -39,6 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     form.addEventListener('submit', (e) => {
         e.preventDefault();
+        if (!engine) return;
         
         const btn = document.getElementById('generate-btn');
         const loader = btn.querySelector('.loader-inner');
@@ -132,7 +167,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const segmentSelect = document.getElementById('customer-segment');
         const mediumSelect = document.getElementById('medium');
         
-        // Clear existing (except maybe placeholder if it existed)
         segmentSelect.innerHTML = '';
         mediumSelect.innerHTML = '';
         
@@ -140,7 +174,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const opt = document.createElement('option');
             opt.value = seg.includes('골드') ? 'gold' : seg.includes('다이아') ? 'diamond' : 'external';
             opt.textContent = seg;
-            opt.dataset.actual = seg; // Keep actual name
             segmentSelect.appendChild(opt);
         });
         
@@ -148,8 +181,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const opt = document.createElement('option');
             opt.value = med === '푸시' ? 'push' : 'lms';
             opt.textContent = med;
-            opt.dataset.actual = med;
             mediumSelect.appendChild(opt);
         });
     }
+
+    // Start initialization
+    await init();
 });
