@@ -147,7 +147,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 isWeekend: document.getElementById('send-day').value === 'weekend',
                 time: document.getElementById('send-time').value,
                 segment: document.getElementById('customer-segment').value,
-                medium: document.getElementById('medium').value === 'push' ? '푸시' : '문자',
+                medium: document.getElementById('medium').value,
                 purpose: document.getElementById('campaign-purpose').value
             };
 
@@ -257,14 +257,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         segments.forEach(seg => {
             const opt = document.createElement('option');
-            opt.value = seg.includes('골드') ? 'gold' : seg.includes('다이아') ? 'diamond' : 'external';
+            opt.value = seg;
             opt.textContent = seg;
             segmentSelect.appendChild(opt);
         });
         
         mediums.forEach(med => {
             const opt = document.createElement('option');
-            opt.value = med === '푸시' ? 'push' : 'lms';
+            opt.value = med;
             opt.textContent = med;
             mediumSelect.appendChild(opt);
         });

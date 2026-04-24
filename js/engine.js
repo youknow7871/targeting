@@ -79,10 +79,23 @@ class CampaignEngine {
     buildPrompt(params) {
         const insights = this.getInsightsForParams(params);
         
+        const m = (params.medium || "").toLowerCase();
+        let category = '문자'; // Default classification
+        
+        if (m.includes('웹') || m.includes('web')) {
+            category = 'WEB';
+        } else if (m.includes('앱') || m === '푸시' || m.includes('푸시')) {
+            category = '푸시';
+        } else if (m.includes('카카오') || m.includes('친구톡')) {
+            category = '친구톡';
+        } else {
+            category = '문자'; // LMS, MMS
+        }
+        
         let mediumConstraints = "";
-        if (params.medium === '푸시') {
+        if (category === '푸시' || category === 'WEB' || category === '친구톡') {
             mediumConstraints = `
-- 🚨 THIS IS A PUSH NOTIFICATION (App/Web Push) or ALIMTALK. IT MUST BE EXTREMELY CONCISE AND SHORT!
+- 🚨 THIS IS A ${category} NOTIFICATION. IT MUST BE EXTREMELY CONCISE AND SHORT!
 - Title Length: MAXIMUM 15~20 characters (must fit on one line on a locked smartphone screen).
 - Content Length: MAXIMUM 30~50 characters.
 - Style: Highly engaging, urgent, or fun.
@@ -91,7 +104,7 @@ class CampaignEngine {
 `;
         } else {
             mediumConstraints = `
-- THIS IS A LONG TEXT MESSAGE (LMS).
+- THIS IS A LONG TEXT MESSAGE (LMS / MMS).
 - Length: Up to 150~300 characters. Detailed and informative.
 - Style: Professional yet highly engaging. Can use structural layouts (e.g., bullet points) and formal greetings.
 `;
