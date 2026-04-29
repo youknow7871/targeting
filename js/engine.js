@@ -93,7 +93,7 @@ class CampaignEngine {
         }
         
         let mediumConstraints = "";
-        if (category === '푸시' || category === 'WEB' || category === '친구톡') {
+        if (category === '푸시' || category === 'WEB') {
             mediumConstraints = `
 - 🚨 THIS IS A ${category} NOTIFICATION. IT MUST BE EXTREMELY CONCISE AND SHORT!
 - Title Length: MAXIMUM 15~20 characters (must fit on one line on a locked smartphone screen).
@@ -101,6 +101,14 @@ class CampaignEngine {
 - Style: Highly engaging, urgent, or fun.
 - You MUST organically use 1 or 2 appropriate EMOJIS (🔔, 🔥, 🚀, 🎁, etc.) in the Title and Content.
 - DO NOT write a long text message. NO formal structural templates like '(광고)' unless necessary. Keep it punchy!
+`;
+        } else if (category === '친구톡') {
+            mediumConstraints = `
+- THIS IS A KAKAOTALK FRIEND-TALK (카카오 친구톡) MESSAGE.
+- Title Length: 15~30 characters. Catchy and engaging.
+- Content Length: Up to 100~250 characters. You can use multiple lines and paragraphs for readability.
+- Style: Friendly, conversational, and highly engaging. 
+- You MUST organically use appropriate EMOJIS. You can use bullet points or structural layouts if needed.
 `;
         } else {
             mediumConstraints = `
