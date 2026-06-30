@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', async () => {
-    const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTgZpOBpn3xw59aPXznJLkXnAMBxQJ3y2VpfxKlLku12jdGvZbHVPo33T81BbuUXRUcqnLYWNvFNLMk/pub?gid=1177965804&single=true&output=csv';
+    const JSON_URL = 'assets/campaign_master.json';
     
     let engine;
     const form = document.getElementById('planner-form');
@@ -28,71 +28,45 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     async function fetchData() {
-        return new Promise((resolve, reject) => {
-            Papa.parse(SHEET_URL, {
-                download: true,
-                header: false,
-                skipEmptyLines: true,
-                complete: (results) => {
-                    const rows = results.data;
-                    // Find header row index (scanning first 10 rows)
-                    let headerIndex = -1;
-                    for (let i = 0; i < Math.min(10, rows.length); i++) {
-                        if (rows[i].includes('고객 세그먼트') || rows[i].includes('발송매체')) {
-                            headerIndex = i;
-                            break;
-                        }
-                    }
-                    
-                    if (headerIndex === -1) {
-                        console.error('Header row not found in the CSV');
-                        resolve([]); // fallback
-                        return;
-                    }
-                    
-                    const headers = rows[headerIndex];
-                    const dataRows = rows.slice(headerIndex + 1);
-                    
-                    const parsedData = dataRows.map(row => {
-                        const obj = {};
-                        headers.forEach((header, index) => {
-                            // Only map non-empty headers
-                            if (header && typeof header === 'string') {
-                                // Keep the first occurrence of a header if duplicates exist
-                                if (!(header.trim() in obj)) {
-                                    obj[header.trim()] = row[index] || "";
-                                }
-                            }
-                        });
-                        return obj;
-                    });
-                    
-                    resolve(parsedData);
-                },
-                error: (error) => {
-                    reject(error);
-                }
-            });
-        });
+        try {
+            // 캐시를 무효화하여 항상 최신 JSON을 가져오도록 설정
+            const timestamp = new Date().getTime();
+            const response = await fetch(`${JSON_URL}?t=${timestamp}`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error("데이터 로드 중 오류 발생:", error);
+            throw error;
+        }
     }
 
     function processSheetData(data) {
-        // Map sheet column names to engine keys if they differ
+        // Map sheet column names to engine keys supporting both new and old schemas
         return data.map(row => ({
-            "발송일자": row["발송일자"] || row["날짜"] || "",
-            "발송시간": row["발송시간"] || "",
-            "발송매체": row["발송매체"] || row["매체"] || "",
-            "고객 세그먼트": row["고객 세그먼트"] || row["세그먼트"] || "",
-            "제목": row["제목"] || "",
-            "내용": row["내용"] || "",
-            "Info": row["Info"] || row["캠페인명"] || "",
-            "오픈율": row["오픈율"] || row["CTR"] || "0%",
-            "CTR": row["CTR"] || row["오픈율"] || "0%",
-            "구매전환율": row["구매율"] || row["구매전환율"] || row["CVR"] || "0%"
+            "발송일자": row["send_date"] || row["발송일자"] || row["날짜"] || "",
+            "발송시간": row["send_time"] || row["발송시간"] || "",
+            "발송매체": row["medium"] || row["발송매체"] || row["매체"] || "",
+            "고객 세그먼트": row["segment"] || row["고객 세그먼트"] || row["세그먼트"] || "",
+            "제목": row["title"] || row["제목"] || "",
+            "내용": row["content"] || row["내용"] || "",
+            "Info": row["purpose"] || row["Info"] || row["캠페인명"] || "",
+            "오픈율": row["ctr"] || row["오픈율"] || row["CTR"] || "0%",
+            "CTR": row["ctr"] || row["오픈율"] || row["CTR"] || "0%",
+            "구매전환율": row["cvr"] || row["구매율"] || row["구매전환율"] || row["CVR"] || "0%",
+            "링크": row["link"] || row["링크"] || "",
+            "카테고리": row["category"] || row["카테고리"] || "",
+            "오퍼": row["offer_type"] || row["오퍼"] || "",
+            "오퍼상세": row["offer_detail"] || row["오퍼상세"] || ""
         }));
     }
 
     function renderKeywordCloud() {
+        if (!keywordCloud) return;
         keywordCloud.innerHTML = '';
         const topKeywords = engine.analyzeKeywords().slice(0, 10);
         topKeywords.forEach(kw => {

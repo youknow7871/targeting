@@ -21,57 +21,92 @@ class CampaignEngine {
     getInsightsForParams(params) {
         const { isWeekend, segment, medium } = params;
         
-        // GROUND RULE: Ignore rows where URL is invalid (e.g., image-only feeds)
+        // GROUND RULE: Ignore rows where URL is invalid (if it exists).
         const validData = this.data.filter(item => {
             const link = (item["링크"] || "").toLowerCase();
-            return link.startsWith("http://") || link.startsWith("https://");
+            if (link) {
+                return link.startsWith("http://") || link.startsWith("https://");
+            }
+            return (item["제목"] || item["내용"]) ? true : false;
         });
 
-        // Filter data relevant to current condition to find what works best
-        const relevantData = validData.filter(item => {
+        // 1. 세그먼트 기준(Baseline) 필터링 - 대상자 편향(Selection Bias) 제거를 위함
+        const segmentData = segment ? validData.filter(item => (item["고객 세그먼트"] || "").includes(segment)) : validData;
+        const baselineData = segmentData.length > 0 ? segmentData : validData;
+        
+        const baselineOpen = baselineData.reduce((acc, i) => acc + i.openRate, 0) / (baselineData.length || 1);
+        const baselineCVR = baselineData.reduce((acc, i) => acc + i.cvr, 0) / (baselineData.length || 1);
+
+        // 2. 매체 등 현재 상황에 맞는 구체적 타깃 데이터 필터링
+        const targetData = baselineData.filter(item => {
             let score = 0;
-            if (item["고객 세그먼트"] && item["고객 세그먼트"].includes(segment)) score += 3;
             if (item["발송매체"] && item["발송매체"].includes(medium)) score += 1;
-            return score >= 1; // Must have some relevance
-        });
+            return score >= 1; 
+        }).length > 0 ? baselineData.filter(item => item["발송매체"] && item["발송매체"].includes(medium)) : baselineData;
 
-        const targetData = relevantData.length > 0 ? relevantData : validData; // fallback to valid data if none match
+        // 3. Taxonomy(소구점) 분류 및 성과 분석
+        const taxonomies = {
+            "동경심/VIP": { keywords: ['vip', '우수', '승급', '플래티넘', '신분', '초대', '특별'], count: 0, sumOpen: 0 },
+            "추천": { keywords: ['추천', '타깃팅', '제안', '맞춤', '고객님을 위한'], count: 0, sumOpen: 0 },
+            "긴급": { keywords: ['오늘만', '이번', '마감', '선착순', '마지막', '종료'], count: 0, sumOpen: 0 },
+            "혜택": { keywords: ['할인', '특가', '쿠폰', '무료', '최대', '적립'], count: 0, sumOpen: 0 },
+            "사은품/행사": { keywords: ['사은품', '이벤트', '참여', '행사', '응모', '증정'], count: 0, sumOpen: 0 }
+        };
 
-        // Keyword extraction & scoring
         const keywords = {};
         targetData.forEach(item => {
             if (!item['제목'] && !item['내용']) return;
-            const words = (item['제목'] + " " + item['내용']).split(/[\s,.;:!?()]+/).filter(w => w.length > 1);
+            const text = (item['제목'] + " " + item['내용'] + " " + (item['Info']||"")).toLowerCase();
+            
+            // Taxonomy 분류
+            for (const [taxName, taxInfo] of Object.entries(taxonomies)) {
+                if (taxInfo.keywords.some(k => text.includes(k))) {
+                    taxInfo.count++;
+                    taxInfo.sumOpen += item.openRate;
+                }
+            }
+
+            // 개별 키워드 추출
+            const words = text.split(/[\s,.;:!?()]+/).filter(w => w.length > 1);
             const uniqueWords = [...new Set(words)];
             
             uniqueWords.forEach(word => {
-                if (!keywords[word]) keywords[word] = { count: 0, sumOpen: 0, sumCvr: 0 };
+                // 노이즈 단어 필터링
+                if (['광고', '무료수신거부', '수신거부', '앱설정', '고객님', '확인해', '바로'].includes(word)) return;
+                if (!keywords[word]) keywords[word] = { count: 0, sumOpen: 0 };
                 keywords[word].count++;
                 keywords[word].sumOpen += item.openRate;
-                keywords[word].sumCvr += item.cvr;
             });
         });
 
-        const results = [];
+        // Taxonomy 리프트 계산
+        const taxResults = [];
+        for (const [taxName, stats] of Object.entries(taxonomies)) {
+            if (stats.count > 0) {
+                const avgOpen = stats.sumOpen / stats.count;
+                const openLift = avgOpen / baselineOpen;
+                taxResults.push({ name: taxName, lift: openLift, avgOpen });
+            }
+        }
+        taxResults.sort((a, b) => b.lift - a.lift);
+        const bestTaxonomy = taxResults.length > 0 ? taxResults[0] : null;
+
+        // 키워드 리프트 계산 (CVR 배제, 오직 CTR Lift 기반)
+        const kwResults = [];
         for (const [word, stats] of Object.entries(keywords)) {
             if (stats.count >= 2) {
                 const avgOpen = stats.sumOpen / stats.count;
-                const avgCvr = stats.sumCvr / stats.count;
-                const openLift = avgOpen / this.globalAvgOpen;
-                const cvrLift = avgCvr / this.globalAvgCvr;
-                
-                // USER REQUIREMENT: Open Rate > CVR priority (70% vs 30%)
-                const score = (openLift * 0.7) + (cvrLift * 0.3);
-                
-                results.push({ word, score, avgOpen, avgCvr });
+                const openLift = avgOpen / baselineOpen;
+                kwResults.push({ word, score: openLift, avgOpen }); // score is pure CTR Lift
             }
         }
         
         return {
-            topKeywords: results.sort((a, b) => b.score - a.score).slice(0, 5),
+            topKeywords: kwResults.sort((a, b) => b.score - a.score).slice(0, 7),
+            bestTaxonomy: bestTaxonomy,
             pastBestPerformers: targetData.sort((a, b) => b.openRate - a.openRate).slice(0, 3),
-            baselineOpen: targetData.reduce((acc, i) => acc + i.openRate, 0) / targetData.length,
-            baselineCVR: targetData.reduce((acc, i) => acc + i.cvr, 0) / targetData.length
+            baselineOpen: baselineOpen,
+            baselineCVR: baselineCVR
         };
     }
 
@@ -113,8 +148,33 @@ class CampaignEngine {
         } else {
             mediumConstraints = `
 - THIS IS A LONG TEXT MESSAGE (LMS / MMS).
-- Length: Up to 150~300 characters. Detailed and informative.
-- Style: Professional yet highly engaging. Can use structural layouts (e.g., bullet points) and formal greetings.
+- ABSOLUTE RULE: You MUST output the content EXACTLY following this structural template. DO NOT deviate from this layout. DO NOT output a short 1-line push notification.
+
+[REQUIRED TEMPLATE]
+(광고) [Brand/Shop Name]
+[1~2 sentences of natural hook/greeting. DO NOT use customer names like "[고객명]님". DO NOT use emojis.]
+
+■ [Event/Promo Name] 안내
+- [Key info 1]
+- [Key info 2]
+
+■ 놓치면 후회할 단독 혜택
+- [Benefit 1]
+- [Benefit 2]
+
+------------------------------------------
+★ 시크릿 혜택 ★
+[Describe the core benefit/gift here]
+(※ [Condition, e.g., 일 선착순 한정])
+------------------------------------------
+
+[Closing sentence urging immediate action without using cliches.]
+무료수신거부 080-XXX-XXXX
+[END OF TEMPLATE]
+
+- Style Constraints:
+  1. NO EMOJIS: STRICTLY NO EMOJIS allowed. Use only standard text symbols (■, ★, ※, ▶).
+  2. TONE: Make it sound exclusive and urgent ("조기 품절 주의").
 `;
         }
         
@@ -126,19 +186,22 @@ Delivery Timing: ${params.time} (${params.isWeekend ? 'Weekend' : 'Weekday'})
 Campaign Purpose: ${params.purpose}
 
 [ML Analytics Data]
-Based on historical data for this audience, the average Open Rate is ${insights.baselineOpen.toFixed(2)}% and CVR is ${insights.baselineCVR.toFixed(2)}%.
-The most statistically effective keywords that mathematically lifted Open Rates (Highest Priority) are: 
-${insights.topKeywords.map(k => `"${k.word}"`).join(', ')}
+Based on historical data for this target audience (Selection Bias removed), the baseline Open Rate is ${insights.baselineOpen.toFixed(2)}% and CVR is ${insights.baselineCVR.toFixed(2)}%.
+${insights.bestTaxonomy ? `The most mathematically effective Campaign Theme (Taxonomy) for this audience is: "${insights.bestTaxonomy.name}" (Lifts Open Rate by ${(insights.bestTaxonomy.lift * 100).toFixed(0)}%). YOU MUST HIGHLY EMPHASIZE THIS THEME in your tone and message.` : ''}
 
-Here are extreme high-performing past successful campaigns exactly for this segment/medium. Use them ONLY as a loose reference for tone:
-${insights.pastBestPerformers.map(p => `- Title: ${p['제목']}\n  Content: ${p['내용']}\n  Result: CTR ${p.openRate}%, CVR ${p.cvr}%`).join('\n\n')}
+The most statistically effective keywords (Relative CTR Lift Priority) for this segment are: 
+${insights.topKeywords.map(k => `"${k.word}" (Lift: +${(k.score * 100 - 100).toFixed(0)}%)`).join(', ')}
+
+Here are extreme high-performing past successful campaigns. CRITICAL: DO NOT COPY THEIR FORMATTING OR EMOJIS IF THEY CONFLICT WITH THE CONSTRAINTS BELOW. Use them ONLY for content inspiration:
+${insights.pastBestPerformers.map(p => `- Title: ${p['제목']}\n  Content: ${p['내용']}\n  Result: CTR ${p.openRate}%`).join('\n\n')}
 
 [Task Constraints]
-1. Write 3 highly engaging, creative, and personalized campaign messages matching the "Campaign Purpose".
+1. Write 3 highly engaging, creative, and personalized campaign messages matching the "Campaign Purpose". Note: Suggest 3 slightly different A/B test variants (e.g., Variant 1: Focus on Urgency, Variant 2: Focus on ${insights.bestTaxonomy ? insights.bestTaxonomy.name : 'Benefit'}, Variant 3: Direct/Concise).
 ${mediumConstraints}
-2. You MUST organically sprinkle the "highly effective keywords" identified by ML into your writing.
-3. Predict the CTR and CVR for each of your 3 recommendations. Make realistic, data-driven estimations slightly higher than historical baseline.
-4. YOU MUST RETURN YOUR RESPONSE IN PURE RAW JSON FORMAT ONLY, without any markdown blocks or explanation. Do not wrap in \`\`\`json. The JSON must be an array of objects precisely following this schema:
+2. ABSOLUTE RULE: You MUST strictly follow the "Style Constraints" defined above for your chosen medium. If the past campaigns contain emojis or names (like 안녕하세요 고객님), IGNORE them and adhere strictly to your constraints.
+3. You MUST organically sprinkle the "highly effective keywords" identified by ML into your writing.
+4. Predict the CTR and CVR for each of your 3 recommendations. Make realistic, data-driven estimations slightly higher than historical baseline.
+5. YOU MUST RETURN YOUR RESPONSE IN PURE RAW JSON FORMAT ONLY, without any markdown blocks or explanation. Do not wrap in \`\`\`json. The JSON must be an array of objects precisely following this schema:
 [
   {
     "title": "String",
