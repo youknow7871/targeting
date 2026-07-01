@@ -1,11 +1,28 @@
 class CampaignEngine {
     constructor(data) {
-        this.data = data.map(item => ({
-            ...item,
-            openRate: parseFloat(item["오픈율"]) || parseFloat(item["CTR"]) || 0,
-            cvr: parseFloat(item["구매전환율"]) || parseFloat(item["CVR"]) || 0,
-            isWeekend: this.checkWeekend(item["발송일자"] || item["날짜"])
-        }));
+        this.data = data.map(item => {
+            let oStr = String(item["오픈율"] || item["CTR"] || "0");
+            let cStr = String(item["구매전환율"] || item["CVR"] || "0");
+            
+            let openRate = parseFloat(oStr) || 0;
+            let cvr = parseFloat(cStr) || 0;
+            
+            // Excel/JSON Data Mart conversion:
+            // Convert fractional decimals (e.g. 0.035) to percentages (3.5)
+            if (openRate > 0 && openRate <= 1 && !oStr.includes('%')) {
+                openRate = openRate * 100;
+            }
+            if (cvr > 0 && cvr <= 1 && !cStr.includes('%')) {
+                cvr = cvr * 100;
+            }
+
+            return {
+                ...item,
+                openRate: openRate,
+                cvr: cvr,
+                isWeekend: this.checkWeekend(item["발송일자"] || item["날짜"])
+            };
+        });
         this.globalAvgOpen = this.data.length ? this.data.reduce((acc, i) => acc + i.openRate, 0) / this.data.length : 1;
         this.globalAvgCvr = this.data.length ? this.data.reduce((acc, i) => acc + i.cvr, 0) / this.data.length : 1;
     }
